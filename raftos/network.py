@@ -18,8 +18,8 @@ class UDPProtocol(asyncio.DatagramProtocol):
     async def start(self):
         while not self.transport.is_closing():
             request = await self.queue.get()
-            data = self.cryptor.encrypt(self.serializer.pack(request['data']))
-            self.transport.sendto(data, request['destination'])
+            data = self.cryptor.encrypt(self.serializer.pack(request["data"]))
+            self.transport.sendto(data, request["destination"])
 
     def connection_made(self, transport):
         self.transport = transport
@@ -27,13 +27,11 @@ class UDPProtocol(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, sender):
         data = self.serializer.unpack(self.cryptor.decrypt(data))
-        data.update({
-            'sender': sender
-        })
+        data.update({"sender": sender})
         self.request_handler(data)
 
     def error_received(self, exc):
-        logger.error('Error received {}'.format(exc))
+        logger.error("Error received {}".format(exc))
 
     def connection_lost(self, exc):
-        logger.error('Connection lost {}'.format(exc))
+        logger.error("Connection lost {}".format(exc))

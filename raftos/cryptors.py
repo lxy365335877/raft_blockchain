@@ -13,7 +13,7 @@ try:
 except ImportError:
     crypto_enabled = False
 
-    logger.warning('cryptography is not installed!')
+    logger.warning("cryptography is not installed!")
 
 
 class BaseCryptor:
@@ -36,7 +36,7 @@ class Cryptor(BaseCryptor):
             length=32,
             salt=self.config.salt,
             iterations=100000,
-            backend=default_backend()
+            backend=default_backend(),
         )
         self.f = Fernet(base64.urlsafe_b64encode(kdf.derive(self.config.secret_key)))
 

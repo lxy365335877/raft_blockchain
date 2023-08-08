@@ -11,7 +11,7 @@ import time
 
 # 下载并加载MNIST数据集
 transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0.5,), (0.5,))])
-train_dataset = torchvision.datasets.MNIST(root="./data", train=True, transform=transform, download=True)
+train_dataset = torchvision.datasets.MNIST(root="./mnt/e/datasets", train=True, transform=transform, download=True)
 
 # 数据预处理
 num_nodes = 10
