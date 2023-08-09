@@ -19,4 +19,3 @@ __all__ = [
 
 get_leader = State.get_leader
 wait_until_leader = State.wait_until_leader
-broadcast = State.broadcast

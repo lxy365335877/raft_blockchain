@@ -5,13 +5,13 @@ from .state import State
 
 
 def atomic_method(func):
-
     @functools.wraps(func)
     async def wrapped(self, *args, **kwargs):
         with await self.lock:
             result = await func(self, *args, **kwargs)
 
         return result
+
     return wrapped
 
 
@@ -23,12 +23,12 @@ class Replicated:
 
     DEFAULT_VALUE = None
 
-    def __init__(self, name, default='REPLICATED_DEFAULT'):
+    def __init__(self, name, default="REPLICATED_DEFAULT"):
         self.lock = asyncio.Lock()
         self.name = name
 
         # For subclasses like ReplicatedDict
-        if default == 'REPLICATED_DEFAULT':
+        if default == "REPLICATED_DEFAULT":
             self.value = self.DEFAULT_VALUE
         else:
             self.value = default

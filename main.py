@@ -7,9 +7,13 @@ import argparse
 import asyncio
 import random
 import time
+import math
+
 from datetime import datetime
 
 import pickle
+import base64
+import gzip
 
 import multiprocessing
 
@@ -26,11 +30,20 @@ local_bs = 10
 ) = util.dataset_loader("mnist", 10, True, num_users)
 
 
-# single node process
-async def run(user_idx, ldr_train):
-    model = util.model_loader("cnn", "mnist", f"cpu", 1, 10, 28)
-    data = raftos.Replicated(name="data")
+# run a single node
+async def single_node(cluster, user_idx, ldr_train):
+    raftos.configure(
+        {
+            "log_path": f"./node/{user_idx}/",
+            "serializer": raftos.serializers.JSONSerializer,
+        }
+    )
     node_id = f"127.0.0.1:{user_idx+base_port}"
+    node = await raftos.register(node_id, cluster=cluster)
+
+    model = util.model_loader("cnn", "mnist", f"cpu", 1, 10, 28)
+    data_id = raftos.Replicated(name="data_id")
+
     nonce = 0
 
     while True:
@@ -42,23 +55,34 @@ async def run(user_idx, ldr_train):
             model, ldr_train, 1, f"cpu:{user_idx}", 0.001, local_bs
         )
 
-        await raftos.broadcast(pickle.dumps(w_local))
+        w_local_serialized = pickle.dumps(w_local)
+        compressed_data = gzip.compress(w_local_serialized)
+        b64_encoded = base64.b64encode(compressed_data)
+        w_local_str = b64_encoded.decode("ascii")
+
         print(user_idx, loss)
+        # await data_id.set(loss)
+        w_local_str_split = [
+            w_local_str[:48000],
+            w_local_str[48000:96000],
+            w_local_str[96000:],
+        ]
+        for i in range(len(w_local_str_split)):
+            data = {
+                "type": "validate",
+                "term": node.state.storage.term,
+                "weight_serial": nonce,
+                "weight_split_no": i,
+                "weight_split": w_local_str_split[i],
+            }
+            node.broadcast(data)
+        nonce += 1
 
 
-# run a single node
-def single_node(cluster, user_idx, ldr_train):
-    raftos.configure(
-        {
-            "log_path": f"./node/{user_idx}/",
-            "serializer": raftos.serializers.JSONSerializer,
-        }
-    )
+def run(cluster, user_idx, ldr_train):
     loop = asyncio.get_event_loop()
-    loop.create_task(
-        raftos.register(f"127.0.0.1:{user_idx+base_port}", cluster=cluster)
-    )
-    loop.run_until_complete(run(user_idx, ldr_train))
+    loop.create_task(single_node(cluster, user_idx, ldr_train))
+    loop.run_forever()
 
 
 if __name__ == "__main__":
@@ -78,7 +102,7 @@ if __name__ == "__main__":
         )
 
         p = multiprocessing.Process(
-            target=single_node,
+            target=run,
             args=(cluster, user_idx, ldr_train),
         )
         p.start()

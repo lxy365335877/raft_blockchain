@@ -7,6 +7,10 @@ from .exceptions import NotALeaderException
 from .storage import FileStorage, Log, StateMachine
 from .timer import Timer
 
+import pickle
+import gzip
+import base64
+
 
 def validate_term(func):
     """Compares current term and request term:
@@ -361,6 +365,7 @@ class Follower(BaseState):
         super().__init__(*args, **kwargs)
 
         self.election_timer = Timer(self.election_interval, self.start_election)
+        self.weight_buffer = ""
 
     def start(self):
         self.init_storage()
@@ -469,6 +474,42 @@ class Follower(BaseState):
             asyncio.ensure_future(
                 self.state.send(response, data["sender"]), loop=self.loop
             )
+
+    @validate_term
+    def on_receive_validate(self, data):
+        self.weight_buffer += data["weight_split"]
+        if data["weight_split_no"] == 2:
+            print("on_receive_validate")
+            w_remote = base64.b64decode(self.weight_buffer)
+            w_remote = gzip.decompress(w_remote)
+            w_remote = pickle.loads(w_remote)
+            print(w_remote)
+            self.weight_buffer = ""
+
+        # if self.storage.voted_for is None and not data["type"].endswith("_response"):
+        #     # Candidates' log has to be up-to-date
+
+        #     # If the logs have last entries with different terms,
+        #     # then the log with the later term is more up-to-date. If the logs end with the same term,
+        #     # then whichever log is longer is more up-to-date.
+
+        #     if data["last_log_term"] != self.log.last_log_term:
+        #         up_to_date = data["last_log_term"] > self.log.last_log_term
+        #     else:
+        #         up_to_date = data["last_log_index"] >= self.log.last_log_index
+
+        #     if up_to_date:
+        #         self.storage.update({"voted_for": data["candidate_id"]})
+
+        #     response = {
+        #         "type": "request_vote_response",
+        #         "term": self.storage.term,
+        #         "vote_granted": up_to_date,
+        #     }
+
+        #     asyncio.ensure_future(
+        #         self.state.send(response, data["sender"]), loop=self.loop
+        #     )
 
     def start_election(self):
         self.state.to_candidate()
