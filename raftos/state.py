@@ -11,6 +11,9 @@ import pickle
 import gzip
 import base64
 
+from fl.models.Update import DatasetSplit, train_new
+from fl.models.test import test_img_new
+
 
 def validate_term(func):
     """Compares current term and request term:
@@ -212,6 +215,10 @@ class Leader(BaseState):
             )
 
             asyncio.ensure_future(self.state.send(data, destination), loop=self.loop)
+
+    @validate_term
+    def on_receive_validate_response(self, data):
+        print(data)
 
     @validate_commit_index
     @validate_term
@@ -479,12 +486,24 @@ class Follower(BaseState):
     def on_receive_validate(self, data):
         self.weight_buffer += data["weight_split"]
         if data["weight_split_no"] == 2:
-            print("on_receive_validate")
             w_remote = base64.b64decode(self.weight_buffer)
             w_remote = gzip.decompress(w_remote)
             w_remote = pickle.loads(w_remote)
-            print(w_remote)
             self.weight_buffer = ""
+
+            server = self.state.server
+            server.validate_model.load_state_dict(w_remote)
+            test_loss, accuracy = test_img_new(server.validate_model, server.ldr_test)
+            print(test_loss, accuracy)
+
+            response = {
+                "type": "validate_response",
+                "accuracy": accuracy,
+                "term": data["term"],
+            }
+            asyncio.ensure_future(
+                self.state.send(response, self.state.get_leader()), loop=self.loop
+            )
 
         # if self.storage.voted_for is None and not data["type"].endswith("_response"):
         #     # Candidates' log has to be up-to-date
@@ -506,10 +525,6 @@ class Follower(BaseState):
         #         "term": self.storage.term,
         #         "vote_granted": up_to_date,
         #     }
-
-        #     asyncio.ensure_future(
-        #         self.state.send(response, data["sender"]), loop=self.loop
-        #     )
 
     def start_election(self):
         self.state.to_candidate()
@@ -614,6 +629,7 @@ class State:
             asyncio.ensure_future(config.on_follower())
         else:
             config.on_follower()
+        # if follower the validate_model will work.
 
     def set_leader(self, leader):
         cls = self.__class__
